@@ -12,71 +12,48 @@
     }
     *{ box-sizing:border-box; }
     body{
-      margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
       background: radial-gradient(1200px 600px at 20% 0%, #122043, var(--bg));
       color:var(--text); padding:16px;
     }
     .wrap{ max-width:560px; margin:0 auto; }
-    .title{ font-size:20px; font-weight:800; margin:8px 0 14px; }
+    .title{ font-size:20px; font-weight:800; margin:8px 0 14px; text-align:center; }
     .card{
-      background:rgba(17,27,46,.9);
+      background:rgba(17,27,46,.92);
       border:1px solid var(--border);
       border-radius:16px;
       padding:14px;
-      box-shadow: 0 10px 24px rgba(0,0,0,.35);
+      box-shadow:0 10px 24px rgba(0,0,0,.35);
     }
     label{ display:block; font-size:13px; color:var(--muted); margin:10px 0 6px; }
     input{
-      width:100%;
-      padding:14px 12px;
-      font-size:16px;
-      border-radius:12px;
-      border:1px solid var(--border);
-      background:rgba(0,0,0,.2);
-      color:var(--text);
-      outline:none;
+      width:100%; padding:14px 12px; font-size:16px;
+      border-radius:12px; border:1px solid var(--border);
+      background:rgba(0,0,0,.2); color:var(--text); outline:none;
     }
-    input::placeholder{ color:rgba(234,240,255,.45); }
     .row{ display:flex; gap:10px; margin-top:12px; }
     button{
-      width:100%;
-      padding:14px 12px;
-      font-size:16px;
-      font-weight:700;
-      border-radius:12px;
-      border:1px solid var(--border);
-      cursor:pointer;
-      color:var(--text);
-      background: var(--btn2);
+      width:100%; padding:14px 12px; font-size:16px; font-weight:700;
+      border-radius:12px; border:1px solid var(--border);
+      cursor:pointer; color:var(--text); background:var(--btn2);
     }
-    button[disabled]{ opacity:.55; cursor:not-allowed; }
-    .primary{ background: var(--btn); border-color: rgba(42,109,244,.4); }
+    button:disabled{ opacity:.6; cursor:not-allowed; }
+    .primary{ background:var(--btn); border-color: rgba(42,109,244,.4); }
     .danger{ background:#7d2c2c; border-color: rgba(125,44,44,.5); }
+    .ghost{ background:transparent; }
     .status{
-      margin-top:12px;
-      padding:12px;
-      border-radius:12px;
-      display:none;
-      white-space:pre-line;
-      border:1px solid var(--border);
+      margin-top:12px; padding:12px; border-radius:12px;
+      display:none; white-space:pre-line; border:1px solid var(--border);
     }
     .status.ok{ display:block; background:rgba(29,107,58,.25); }
     .status.bad{ display:block; background:rgba(122,29,29,.25); }
     .status.warn{ display:block; background:rgba(107,91,29,.25); }
     #reader{
-      margin-top:12px;
-      overflow:hidden;
-      border-radius:14px;
-      border:1px solid var(--border);
-      background:#000;
+      margin-top:12px; overflow:hidden; border-radius:14px;
+      border:1px solid var(--border); background:#000;
     }
-    .mini{
-      margin-top:8px;
-      font-size:12px;
-      color:rgba(234,240,255,.55);
-      word-break: break-all;
-    }
-    code{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .mini{ margin-top:10px; font-size:12px; color:rgba(234,240,255,.55); }
+    .bar{ display:flex; gap:10px; margin-top:12px; }
   </style>
 </head>
 
@@ -88,44 +65,51 @@
       <label>ชื่อผู้เช็คอิน (ทีมงาน)</label>
       <input id="checker" placeholder="เช่น ทีม A / ชื่อเล่น" autocomplete="name"/>
 
-      <label>รหัสตั๋ว (สแกนแล้วจะขึ้นเอง)</label>
+      <label>รหัสตั๋ว</label>
       <input id="ticketId" placeholder="TICKET-XXXXXXXX" autocapitalize="characters" />
 
       <div class="row">
-        <button class="primary" id="btnStart" onclick="startScan()">📷 เริ่มสแกน</button>
+        <button id="btnScan" class="primary" onclick="startScan()">📷 เริ่มสแกน</button>
         <button id="btnStop" onclick="stopScan()">⏹ หยุดสแกน</button>
       </div>
 
       <div class="row">
-        <button id="btnSwitch" onclick="switchCamera()">🔁 สลับกล้อง</button>
-        <button class="primary" id="btnCheckin" onclick="submitCheckin()">✅ เช็คอิน</button>
+        <button id="btnCheckin" class="primary" onclick="submitCheckin()">✅ เช็คอิน</button>
+        <button class="danger" onclick="clearAll()">🧹 ล้าง</button>
       </div>
 
-      <div class="row">
-        <button class="danger" onclick="clearAll()">🧹 ล้าง</button>
+      <div class="bar">
+        <button class="ghost" onclick="setApiUrl()">⚙️ ตั้งค่า API</button>
+        <button class="ghost" onclick="testApi()">🧪 ทดสอบ API</button>
       </div>
 
       <div id="result" class="status"></div>
 
       <div id="reader"></div>
       <div class="mini" id="scanState">สถานะสแกน: ยังไม่เริ่ม</div>
-      <div class="mini">API: <code id="apiText"></code></div>
-      <div class="mini">Camera in use: <code id="camText">-</code></div>
+      <div class="mini" id="apiState"></div>
     </div>
   </div>
 
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script>
-    // ✅ ใส่ URL /exec ของ Web App Apps Script ตรงนี้
-    const API_URL = 'PUT_YOUR_APPS_SCRIPT_WEBAPP_EXEC_URL_HERE';
-    document.getElementById('apiText').textContent = API_URL;
-
     let qr = null;
     let scanning = false;
 
-    let cameras = [];          // {id,label} list
-    let currentCamIndex = 0;   // which camera we are using
-    let lastCamId = null;
+    const API_KEY = 'TICKET_CHECKIN_API_URL';
+    function getApiUrl(){ return localStorage.getItem(API_KEY) || ''; }
+    function setApiUrl(){
+      const current = getApiUrl();
+      const v = prompt('วาง Apps Script Web App URL (/exec):', current);
+      if (!v) return;
+      localStorage.setItem(API_KEY, v.trim());
+      renderApiState();
+      setStatus('บันทึก API_URL แล้ว', 'ok');
+    }
+    function renderApiState(){
+      const v = getApiUrl();
+      document.getElementById('apiState').textContent = v ? ('API: ตั้งค่าแล้ว') : ('API: ยังไม่ตั้งค่า');
+    }
 
     function setStatus(msg, type='ok'){
       const el = document.getElementById('result');
@@ -133,88 +117,177 @@
       el.style.display = 'block';
       el.textContent = msg;
     }
-
     function setScanState(txt){
       document.getElementById('scanState').textContent = 'สถานะสแกน: ' + txt;
     }
-
-    function setCamText(txt){
-      document.getElementById('camText').textContent = txt || '-';
-    }
-
-    function disableCheckin(disabled){
-      document.getElementById('btnCheckin').disabled = disabled;
-    }
-
-    async function requestCameraPermissionPreferBack(){
-      // ขอ permission ก่อน เพื่อให้ enumerateDevices เห็น label และ deviceId ชัด
-      if (!navigator.mediaDevices?.getUserMedia) return false;
-      try{
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false
-        });
-        stream.getTracks().forEach(t => t.stop());
-        return true;
-      } catch(e){
-        return false;
-      }
-    }
-
-    function pickBackCameraIndex(list){
-      // พยายามเลือกกล้องหลังจาก label
-      const idx = list.findIndex(c => /back|rear|environment/i.test(c.label || ''));
-      if (idx !== -1) return idx;
-
-      // ถ้าไม่มี label (บางเครื่อง), เดาโดยเลือก "ตัวท้ายสุด" มักเป็นกล้องหลัง
-      if (list.length >= 2) return list.length - 1;
-
-      return 0;
-    }
-
-    async function refreshCameraList(){
-      cameras = await Html5Qrcode.getCameras();
-      if (!Array.isArray(cameras) || cameras.length === 0) return false;
-
-      currentCamIndex = pickBackCameraIndex(cameras);
-      return true;
+    function setBusy(b){
+      document.getElementById('btnScan').disabled = b;
+      document.getElementById('btnStop').disabled = b;
+      document.getElementById('btnCheckin').disabled = b;
     }
 
     async function startScan(){
       if (scanning) return;
 
       document.getElementById('reader').innerHTML = '';
-      setScanState('กำลังขอสิทธิ์กล้อง...');
-      setStatus('กำลังขอสิทธิ์กล้อง...', 'warn');
-
-      const ok = await requestCameraPermissionPreferBack();
-      if (!ok) {
-        setStatus('ไม่สามารถขอสิทธิ์กล้องได้ กรุณาอนุญาต Camera ในเบราว์เซอร์', 'bad');
-        setScanState('ไม่ได้รับสิทธิ์กล้อง');
-        return;
-      }
-
-      const okList = await refreshCameraList();
-      if (!okList) {
-        setStatus('ไม่พบรายการกล้อง', 'bad');
-        setScanState('ไม่พบกล้อง');
-        return;
-      }
-
-      // start with selected cameraId (back camera)
-      await startWithCameraId_(cameras[currentCamIndex]?.id);
-    }
-
-    async function startWithCameraId_(camId){
-      if (!camId) {
-        setStatus('ไม่พบกล้องที่เลือก', 'bad');
-        setScanState('ไม่พบกล้อง');
-        return;
-      }
+      setScanState('กำลังเปิดกล้อง...');
+      setStatus('กำลังเปิดกล้อง...', 'warn');
 
       try{
         qr = new Html5Qrcode("reader");
         scanning = true;
 
-        lastCamId = camId;
-        const label = cameras.find(c => c.id === camId)?.label || camId
+        // ✅ บังคับใช้กล้องหลัง (environment) ก่อน
+        // html5-qrcode รองรับส่ง object แทน cameraId
+        const cameraConfig = { facingMode: { exact: "environment" } };
+
+        await qr.start(
+          cameraConfig,
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          async (decodedText) => {
+            const val = (decodedText || '').trim();
+            document.getElementById('ticketId').value = val;
+            if (navigator.vibrate) navigator.vibrate(60);
+            setStatus('สแกนสำเร็จ: ' + val, 'ok');
+            setScanState('สแกนสำเร็จ (หยุดอัตโนมัติ)');
+            await stopScan();
+          }
+        );
+
+        setStatus('เปิดกล้องแล้ว กำลังสแกน...', 'ok');
+        setScanState('กำลังสแกน...');
+
+      } catch(err1){
+        // 🔁 fallback: บางเครื่องไม่รองรับ exact environment
+        try{
+          if (qr) { try { await qr.stop(); } catch(e){} try{ await qr.clear(); }catch(e){} }
+          qr = new Html5Qrcode("reader");
+          const fallbackConfig = { facingMode: "environment" };
+
+          await qr.start(
+            fallbackConfig,
+            { fps: 10, qrbox: { width: 250, height: 250 } },
+            async (decodedText) => {
+              const val = (decodedText || '').trim();
+              document.getElementById('ticketId').value = val;
+              if (navigator.vibrate) navigator.vibrate(60);
+              setStatus('สแกนสำเร็จ: ' + val, 'ok');
+              setScanState('สแกนสำเร็จ (หยุดอัตโนมัติ)');
+              await stopScan();
+            }
+          );
+          setStatus('เปิดกล้องแล้ว กำลังสแกน...', 'ok');
+          setScanState('กำลังสแกน...');
+        } catch(err2){
+          scanning = false;
+          setStatus('เปิดกล้องไม่ได้\n' + String(err2 || err1), 'bad');
+          setScanState('เปิดกล้องไม่ได้');
+        }
+      }
+    }
+
+    async function stopScan(){
+      try{
+        if (qr && scanning) {
+          await qr.stop();
+          await qr.clear();
+        }
+      } catch(e) {}
+      scanning = false;
+      setScanState('หยุดแล้ว');
+    }
+
+    function clearAll(){
+      document.getElementById('ticketId').value = '';
+      document.getElementById('result').style.display = 'none';
+    }
+
+    async function testApi(){
+      const api = getApiUrl();
+      if (!api) return setStatus('ยังไม่ได้ตั้งค่า API_URL', 'bad');
+
+      setBusy(true);
+      setStatus('กำลังทดสอบ API...', 'warn');
+
+      try{
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 8000);
+
+        const res = await fetch(api, {
+          method: 'GET',
+          signal: ctrl.signal,
+          cache: 'no-store'
+        });
+
+        clearTimeout(t);
+
+        const text = await res.text();
+        setStatus('API ตอบกลับแล้ว:\n' + text.slice(0, 200), 'ok');
+
+      } catch(e){
+        setStatus('ทดสอบ API ไม่สำเร็จ: ' + String(e), 'bad');
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function submitCheckin(){
+      const api = getApiUrl();
+      if (!api) return setStatus('ยังไม่ได้ตั้งค่า API_URL', 'bad');
+
+      const ticketId = document.getElementById('ticketId').value.trim();
+      const checker = document.getElementById('checker').value.trim() || 'staff';
+
+      if (!ticketId) return setStatus('กรุณาสแกนหรือกรอกรหัสตั๋วก่อน', 'bad');
+
+      setBusy(true);
+      setStatus('กำลังเช็คอิน...', 'warn');
+
+      try{
+        // ✅ ส่งแบบ x-www-form-urlencoded ลดปัญหา preflight/CORS
+        const body = new URLSearchParams({
+          action: 'checkin',
+          ticketId,
+          checker
+        });
+
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 12000);
+
+        const res = await fetch(api, {
+          method: 'POST',
+          body,
+          signal: ctrl.signal,
+          cache: 'no-store'
+        });
+
+        clearTimeout(t);
+
+        const data = await res.json().catch(() => null);
+        if (!data || !data.ok) {
+          return setStatus((data && data.message) ? data.message : 'เช็คอินไม่สำเร็จ', 'bad');
+        }
+
+        if (data.already) {
+          return setStatus(
+            `⚠️ ${data.message}\nชื่อ: ${data.name || '-'}\nเวลา: ${data.checkedInAt || '-'}\nโดย: ${data.checkedInBy || '-'}`,
+            'warn'
+          );
+        }
+
+        setStatus(
+          `✅ ${data.message}\nชื่อ: ${data.name || '-'}\nเวลา: ${data.checkedInAt || '-'}\nโดย: ${data.checkedInBy || '-'}`,
+          'ok'
+        );
+
+      } catch(e){
+        setStatus('เช็คอินผิดพลาด: ' + String(e), 'bad');
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    renderApiState();
+  </script>
+</body>
+</html>
