@@ -52,15 +52,6 @@
     button[disabled]{ opacity:.55; cursor:not-allowed; }
     .primary{ background: var(--btn); border-color: rgba(42,109,244,.4); }
     .danger{ background:#7d2c2c; border-color: rgba(125,44,44,.5); }
-    .hint{
-      margin-top:10px;
-      padding:10px 12px;
-      border-radius:12px;
-      border:1px dashed rgba(255,255,255,.18);
-      color:var(--muted);
-      font-size:13px;
-      line-height:1.45;
-    }
     .status{
       margin-top:12px;
       padding:12px;
@@ -111,13 +102,6 @@
 
       <div id="result" class="status"></div>
 
-      <div class="hint">
-        ถ้าเปิดกล้องไม่ได้:
-        <br>• iPhone แนะนำ Safari
-        <br>• กด <b>aA</b> บนแถบ URL → Website Settings → Camera: <b>Allow</b>
-        <br>• อย่าเปิดผ่าน in-app browser (เช่น LINE)
-      </div>
-
       <div id="reader"></div>
       <div class="mini" id="scanState">สถานะสแกน: ยังไม่เริ่ม</div>
       <div class="mini">API: <code id="apiText"></code></div>
@@ -128,7 +112,6 @@
   <script>
     // ✅ ใส่ URL /exec ของ Web App Apps Script ตรงนี้
     const API_URL = 'PUT_YOUR_APPS_SCRIPT_WEBAPP_EXEC_URL_HERE';
-
     document.getElementById('apiText').textContent = API_URL;
 
     let qr = null;
@@ -149,10 +132,14 @@
       document.getElementById('btnCheckin').disabled = disabled;
     }
 
-    async function preRequestCameraPermission(){
+    async function ensureBackCameraPermission(){
+      // ขอ permission ด้วยกล้องหลังโดยตรง
+      if (!navigator.mediaDevices?.getUserMedia) return false;
       try {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }});
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false
+        });
         stream.getTracks().forEach(t => t.stop());
         return true;
       } catch {
@@ -167,29 +154,22 @@
       setScanState('กำลังขอสิทธิ์กล้อง...');
       setStatus('กำลังขอสิทธิ์กล้อง...', 'warn');
 
-      const ok = await preRequestCameraPermission();
+      const ok = await ensureBackCameraPermission();
       if (!ok) {
-        setStatus('ยังไม่ได้รับสิทธิ์กล้อง (ไป Allow Camera ใน Browser/Settings)', 'bad');
+        setStatus('ไม่สามารถขอสิทธิ์กล้องได้ กรุณาอนุญาต Camera ในเบราว์เซอร์', 'bad');
         setScanState('ไม่ได้รับสิทธิ์กล้อง');
         return;
       }
 
       try{
         qr = new Html5Qrcode("reader");
-        const cameras = await Html5Qrcode.getCameras();
-
-        let cam = cameras?.find(c => /back|rear|environment/i.test(c.label)) || cameras?.[0];
-        const camId = cam?.id;
-        if (!camId) {
-          setStatus('ไม่พบกล้องในอุปกรณ์นี้', 'bad');
-          setScanState('ไม่พบกล้อง');
-          return;
-        }
-
         scanning = true;
+
+        // ✅ วิธีที่ชัวร์สุด: ขอให้ไลบรารีเปิด "กล้องหลัง" ด้วย facingMode เลย
+        // (บางเครื่องจะไม่คืน label ให้เลือก cameraId จนกว่าจะอนุญาตแล้ว)
         await qr.start(
-          camId,
-          { fps: 10, qrbox: { width: 250, height: 250 } },
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 260, height: 260 } },
           async (decodedText) => {
             const val = (decodedText || '').trim();
             document.getElementById('ticketId').value = val;
@@ -201,12 +181,37 @@
           }
         );
 
-        setStatus('เปิดกล้องแล้ว กำลังสแกน...', 'ok');
+        setStatus('เปิดกล้องหลังแล้ว กำลังสแกน...', 'ok');
         setScanState('กำลังสแกน...');
-      } catch(err){
-        scanning = false;
-        setStatus('เปิดกล้องไม่ได้\n' + String(err), 'bad');
-        setScanState('เปิดกล้องไม่ได้');
+      } catch(err1){
+        // ✅ Fallback: ถ้า facingMode ไม่ได้ ให้เลือก cameraId ที่เป็น back/rear/environment
+        try{
+          const cameras = await Html5Qrcode.getCameras();
+          let cam = cameras?.find(c => /back|rear|environment/i.test(c.label)) || cameras?.[0];
+          const camId = cam?.id;
+          if (!camId) throw new Error('ไม่พบกล้อง');
+
+          await qr.start(
+            camId,
+            { fps: 10, qrbox: { width: 260, height: 260 } },
+            async (decodedText) => {
+              const val = (decodedText || '').trim();
+              document.getElementById('ticketId').value = val;
+
+              if (navigator.vibrate) navigator.vibrate(60);
+              setStatus('สแกนสำเร็จ: ' + val, 'ok');
+              setScanState('สแกนสำเร็จ (หยุดอัตโนมัติ)');
+              await stopScan();
+            }
+          );
+
+          setStatus('เปิดกล้องแล้ว กำลังสแกน...', 'ok');
+          setScanState('กำลังสแกน...');
+        } catch(err2){
+          scanning = false;
+          setStatus('เปิดกล้องไม่ได้\n' + String(err2 || err1), 'bad');
+          setScanState('เปิดกล้องไม่ได้');
+        }
       }
     }
 
@@ -234,7 +239,7 @@
       if (!API_URL || API_URL.includes('PUT_')) return setStatus('กรุณาตั้งค่า API_URL ให้ถูกต้องก่อน', 'bad');
 
       disableCheckin(true);
-      setStatus('กำลังเช็คอิน... (ถ้าช้าเกิน 12 วิให้ลองใหม่)', 'warn');
+      setStatus('กำลังเช็คอิน...', 'warn');
 
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 12000);
