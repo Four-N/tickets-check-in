@@ -74,6 +74,7 @@
       margin-top:8px;
       font-size:12px;
       color:rgba(234,240,255,.55);
+      word-break: break-all;
     }
     code{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
   </style>
@@ -96,7 +97,11 @@
       </div>
 
       <div class="row">
+        <button id="btnSwitch" onclick="switchCamera()">🔁 สลับกล้อง</button>
         <button class="primary" id="btnCheckin" onclick="submitCheckin()">✅ เช็คอิน</button>
+      </div>
+
+      <div class="row">
         <button class="danger" onclick="clearAll()">🧹 ล้าง</button>
       </div>
 
@@ -105,6 +110,7 @@
       <div id="reader"></div>
       <div class="mini" id="scanState">สถานะสแกน: ยังไม่เริ่ม</div>
       <div class="mini">API: <code id="apiText"></code></div>
+      <div class="mini">Camera in use: <code id="camText">-</code></div>
     </div>
   </div>
 
@@ -117,6 +123,10 @@
     let qr = null;
     let scanning = false;
 
+    let cameras = [];          // {id,label} list
+    let currentCamIndex = 0;   // which camera we are using
+    let lastCamId = null;
+
     function setStatus(msg, type='ok'){
       const el = document.getElementById('result');
       el.className = 'status ' + type;
@@ -128,23 +138,46 @@
       document.getElementById('scanState').textContent = 'สถานะสแกน: ' + txt;
     }
 
+    function setCamText(txt){
+      document.getElementById('camText').textContent = txt || '-';
+    }
+
     function disableCheckin(disabled){
       document.getElementById('btnCheckin').disabled = disabled;
     }
 
-    async function ensureBackCameraPermission(){
-      // ขอ permission ด้วยกล้องหลังโดยตรง
+    async function requestCameraPermissionPreferBack(){
+      // ขอ permission ก่อน เพื่อให้ enumerateDevices เห็น label และ deviceId ชัด
       if (!navigator.mediaDevices?.getUserMedia) return false;
-      try {
+      try{
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: "environment" } },
           audio: false
         });
         stream.getTracks().forEach(t => t.stop());
         return true;
-      } catch {
+      } catch(e){
         return false;
       }
+    }
+
+    function pickBackCameraIndex(list){
+      // พยายามเลือกกล้องหลังจาก label
+      const idx = list.findIndex(c => /back|rear|environment/i.test(c.label || ''));
+      if (idx !== -1) return idx;
+
+      // ถ้าไม่มี label (บางเครื่อง), เดาโดยเลือก "ตัวท้ายสุด" มักเป็นกล้องหลัง
+      if (list.length >= 2) return list.length - 1;
+
+      return 0;
+    }
+
+    async function refreshCameraList(){
+      cameras = await Html5Qrcode.getCameras();
+      if (!Array.isArray(cameras) || cameras.length === 0) return false;
+
+      currentCamIndex = pickBackCameraIndex(cameras);
+      return true;
     }
 
     async function startScan(){
@@ -154,10 +187,28 @@
       setScanState('กำลังขอสิทธิ์กล้อง...');
       setStatus('กำลังขอสิทธิ์กล้อง...', 'warn');
 
-      const ok = await ensureBackCameraPermission();
+      const ok = await requestCameraPermissionPreferBack();
       if (!ok) {
         setStatus('ไม่สามารถขอสิทธิ์กล้องได้ กรุณาอนุญาต Camera ในเบราว์เซอร์', 'bad');
         setScanState('ไม่ได้รับสิทธิ์กล้อง');
+        return;
+      }
+
+      const okList = await refreshCameraList();
+      if (!okList) {
+        setStatus('ไม่พบรายการกล้อง', 'bad');
+        setScanState('ไม่พบกล้อง');
+        return;
+      }
+
+      // start with selected cameraId (back camera)
+      await startWithCameraId_(cameras[currentCamIndex]?.id);
+    }
+
+    async function startWithCameraId_(camId){
+      if (!camId) {
+        setStatus('ไม่พบกล้องที่เลือก', 'bad');
+        setScanState('ไม่พบกล้อง');
         return;
       }
 
@@ -165,119 +216,5 @@
         qr = new Html5Qrcode("reader");
         scanning = true;
 
-        // ✅ วิธีที่ชัวร์สุด: ขอให้ไลบรารีเปิด "กล้องหลัง" ด้วย facingMode เลย
-        // (บางเครื่องจะไม่คืน label ให้เลือก cameraId จนกว่าจะอนุญาตแล้ว)
-        await qr.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 260, height: 260 } },
-          async (decodedText) => {
-            const val = (decodedText || '').trim();
-            document.getElementById('ticketId').value = val;
-
-            if (navigator.vibrate) navigator.vibrate(60);
-            setStatus('สแกนสำเร็จ: ' + val, 'ok');
-            setScanState('สแกนสำเร็จ (หยุดอัตโนมัติ)');
-            await stopScan();
-          }
-        );
-
-        setStatus('เปิดกล้องหลังแล้ว กำลังสแกน...', 'ok');
-        setScanState('กำลังสแกน...');
-      } catch(err1){
-        // ✅ Fallback: ถ้า facingMode ไม่ได้ ให้เลือก cameraId ที่เป็น back/rear/environment
-        try{
-          const cameras = await Html5Qrcode.getCameras();
-          let cam = cameras?.find(c => /back|rear|environment/i.test(c.label)) || cameras?.[0];
-          const camId = cam?.id;
-          if (!camId) throw new Error('ไม่พบกล้อง');
-
-          await qr.start(
-            camId,
-            { fps: 10, qrbox: { width: 260, height: 260 } },
-            async (decodedText) => {
-              const val = (decodedText || '').trim();
-              document.getElementById('ticketId').value = val;
-
-              if (navigator.vibrate) navigator.vibrate(60);
-              setStatus('สแกนสำเร็จ: ' + val, 'ok');
-              setScanState('สแกนสำเร็จ (หยุดอัตโนมัติ)');
-              await stopScan();
-            }
-          );
-
-          setStatus('เปิดกล้องแล้ว กำลังสแกน...', 'ok');
-          setScanState('กำลังสแกน...');
-        } catch(err2){
-          scanning = false;
-          setStatus('เปิดกล้องไม่ได้\n' + String(err2 || err1), 'bad');
-          setScanState('เปิดกล้องไม่ได้');
-        }
-      }
-    }
-
-    async function stopScan(){
-      try{
-        if (qr && scanning) {
-          await qr.stop();
-          await qr.clear();
-        }
-      } catch {}
-      scanning = false;
-      setScanState('หยุดแล้ว');
-    }
-
-    function clearAll(){
-      document.getElementById('ticketId').value = '';
-      document.getElementById('result').style.display = 'none';
-    }
-
-    async function submitCheckin(){
-      const ticketId = document.getElementById('ticketId').value.trim();
-      const checkerName = document.getElementById('checker').value.trim();
-
-      if (!ticketId) return setStatus('กรุณาสแกนหรือกรอกรหัสตั๋วก่อน', 'bad');
-      if (!API_URL || API_URL.includes('PUT_')) return setStatus('กรุณาตั้งค่า API_URL ให้ถูกต้องก่อน', 'bad');
-
-      disableCheckin(true);
-      setStatus('กำลังเช็คอิน...', 'warn');
-
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 12000);
-
-      try{
-        const r = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ticketId, checkerName }),
-          signal: controller.signal
-        });
-
-        const res = await r.json();
-
-        if (!res?.ok) {
-          setStatus(res?.message || 'ผิดพลาด', 'bad');
-          return;
-        }
-
-        if (res.already) {
-          setStatus(
-            `⚠️ ${res.message}\nชื่อ: ${res.name || '-'}\nเวลา: ${res.checkedInAt || '-'}\nโดย: ${res.checkedInBy || '-'}`,
-            'warn'
-          );
-          return;
-        }
-
-        setStatus(
-          `✅ ${res.message}\nชื่อ: ${res.name || '-'}\nเวลา: ${res.checkedInAt || '-'}\nโดย: ${res.checkedInBy || '-'}`,
-          'ok'
-        );
-      } catch (e) {
-        setStatus('เช็คอินช้า/ไม่ตอบสนอง (ลองใหม่)\n' + String(e), 'bad');
-      } finally {
-        clearTimeout(timer);
-        disableCheckin(false);
-      }
-    }
-  </script>
-</body>
-</html>
+        lastCamId = camId;
+        const label = cameras.find(c => c.id === camId)?.label || camId
