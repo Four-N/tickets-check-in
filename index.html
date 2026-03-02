@@ -19,41 +19,71 @@
     .wrap{ max-width:560px; margin:0 auto; }
     .title{ font-size:20px; font-weight:800; margin:8px 0 14px; }
     .card{
-      background:rgba(17,27,46,.9); border:1px solid var(--border);
-      border-radius:16px; padding:14px; box-shadow: 0 10px 24px rgba(0,0,0,.35);
+      background:rgba(17,27,46,.9);
+      border:1px solid var(--border);
+      border-radius:16px;
+      padding:14px;
+      box-shadow: 0 10px 24px rgba(0,0,0,.35);
     }
     label{ display:block; font-size:13px; color:var(--muted); margin:10px 0 6px; }
     input{
-      width:100%; padding:14px 12px; font-size:16px; border-radius:12px;
-      border:1px solid var(--border); background:rgba(0,0,0,.2); color:var(--text);
+      width:100%;
+      padding:14px 12px;
+      font-size:16px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(0,0,0,.2);
+      color:var(--text);
       outline:none;
     }
     input::placeholder{ color:rgba(234,240,255,.45); }
     .row{ display:flex; gap:10px; margin-top:12px; }
     button{
-      width:100%; padding:14px 12px; font-size:16px; font-weight:700;
-      border-radius:12px; border:1px solid var(--border); cursor:pointer;
-      color:var(--text); background: var(--btn2);
+      width:100%;
+      padding:14px 12px;
+      font-size:16px;
+      font-weight:700;
+      border-radius:12px;
+      border:1px solid var(--border);
+      cursor:pointer;
+      color:var(--text);
+      background: var(--btn2);
     }
+    button[disabled]{ opacity:.55; cursor:not-allowed; }
     .primary{ background: var(--btn); border-color: rgba(42,109,244,.4); }
     .danger{ background:#7d2c2c; border-color: rgba(125,44,44,.5); }
     .hint{
-      margin-top:10px; padding:10px 12px; border-radius:12px;
+      margin-top:10px;
+      padding:10px 12px;
+      border-radius:12px;
       border:1px dashed rgba(255,255,255,.18);
-      color:var(--muted); font-size:13px; line-height:1.45;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.45;
     }
     .status{
-      margin-top:12px; padding:12px; border-radius:12px; display:none;
-      white-space:pre-line; border:1px solid var(--border);
+      margin-top:12px;
+      padding:12px;
+      border-radius:12px;
+      display:none;
+      white-space:pre-line;
+      border:1px solid var(--border);
     }
     .status.ok{ display:block; background:rgba(29,107,58,.25); }
     .status.bad{ display:block; background:rgba(122,29,29,.25); }
     .status.warn{ display:block; background:rgba(107,91,29,.25); }
     #reader{
-      margin-top:12px; overflow:hidden; border-radius:14px;
-      border:1px solid var(--border); background:#000;
+      margin-top:12px;
+      overflow:hidden;
+      border-radius:14px;
+      border:1px solid var(--border);
+      background:#000;
     }
-    .mini{ margin-top:8px; font-size:12px; color:rgba(234,240,255,.55); }
+    .mini{
+      margin-top:8px;
+      font-size:12px;
+      color:rgba(234,240,255,.55);
+    }
     code{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
   </style>
 </head>
@@ -70,37 +100,39 @@
       <input id="ticketId" placeholder="TICKET-XXXXXXXX" autocapitalize="characters" />
 
       <div class="row">
-        <button class="primary" onclick="startScan()">📷 เริ่มสแกน</button>
-        <button onclick="stopScan()">⏹ หยุดสแกน</button>
+        <button class="primary" id="btnStart" onclick="startScan()">📷 เริ่มสแกน</button>
+        <button id="btnStop" onclick="stopScan()">⏹ หยุดสแกน</button>
       </div>
 
       <div class="row">
-        <button class="primary" onclick="submitCheckin()">✅ เช็คอิน</button>
+        <button class="primary" id="btnCheckin" onclick="submitCheckin()">✅ เช็คอิน</button>
         <button class="danger" onclick="clearAll()">🧹 ล้าง</button>
       </div>
 
       <div id="result" class="status"></div>
 
       <div class="hint">
-        แนะนำ: ใช้ลิงก์ที่ขึ้นต้นด้วย <b>script.googleusercontent.com</b> (ไม่ใช่ script.google.com)<br>
-        ถ้าเปิดกล้องไม่ได้:<br>
-        • iOS: กด <b>aA</b> → การตั้งค่าเว็บไซต์ → กล้อง: <b>อนุญาต</b><br>
-        • Android: กดไอคอนข้าง URL → Permissions → Camera: <b>Allow</b><br>
-        • ถ้าเคยกด Block ให้รีเซ็ตสิทธิ์ไซต์ แล้วเปิดใหม่
+        ถ้าเปิดกล้องไม่ได้:
+        <br>• iPhone แนะนำ Safari
+        <br>• กด <b>aA</b> บนแถบ URL → Website Settings → Camera: <b>Allow</b>
+        <br>• อย่าเปิดผ่าน in-app browser (เช่น LINE)
       </div>
 
       <div id="reader"></div>
       <div class="mini" id="scanState">สถานะสแกน: ยังไม่เริ่ม</div>
-      <div class="mini">URL ปัจจุบัน: <code id="curUrl"></code></div>
+      <div class="mini">API: <code id="apiText"></code></div>
     </div>
   </div>
 
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script>
+    // ✅ ใส่ URL /exec ของ Web App Apps Script ตรงนี้
+    const API_URL = 'PUT_YOUR_APPS_SCRIPT_WEBAPP_EXEC_URL_HERE';
+
+    document.getElementById('apiText').textContent = API_URL;
+
     let qr = null;
     let scanning = false;
-
-    document.getElementById('curUrl').textContent = location.href;
 
     function setStatus(msg, type='ok'){
       const el = document.getElementById('result');
@@ -113,73 +145,56 @@
       document.getElementById('scanState').textContent = 'สถานะสแกน: ' + txt;
     }
 
-    function isLineInAppBrowser(){
-      const ua = navigator.userAgent || '';
-      return /Line/i.test(ua) || /LIFF/i.test(ua);
+    function disableCheckin(disabled){
+      document.getElementById('btnCheckin').disabled = disabled;
     }
 
-    function buildHelpFromErr(err){
-      const name = err?.name || '';
-      const msg = String(err || '');
-
-      let hint = '';
-      if (name === 'NotAllowedError' || msg.includes('NotAllowedError')) {
-        hint =
-          'กล้องถูกปฏิเสธ/ถูกบล็อก\n' +
-          'Android: ไอคอนข้าง URL → Permissions → Camera: Allow\n' +
-          'iOS: aA → การตั้งค่าเว็บไซต์ → กล้อง: อนุญาต\n' +
-          'ถ้าเคยกด Block ให้รีเซ็ตสิทธิ์ไซต์แล้วเปิดใหม่';
-      } else if (name === 'NotFoundError') {
-        hint = 'ไม่พบกล้องในอุปกรณ์นี้';
-      } else if (name === 'NotReadableError') {
-        hint = 'กล้องถูกใช้งานโดยแอปอื่นอยู่ (ปิดแอปกล้อง/LINE/Instagram แล้วลองใหม่)';
-      } else {
-        hint =
-          'ลองใช้ลิงก์แบบ script.googleusercontent.com\n' +
-          'และตรวจสอบว่าเป็น HTTPS + อนุญาตกล้องให้เว็บนี้แล้ว';
+    async function preRequestCameraPermission(){
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }});
+        stream.getTracks().forEach(t => t.stop());
+        return true;
+      } catch {
+        return false;
       }
-      return { name, msg, hint };
     }
 
     async function startScan(){
       if (scanning) return;
 
-      if (isLineInAppBrowser()) {
-        setStatus(
-          "ตอนนี้กำลังเปิดผ่าน LINE in-app browser ซึ่งมักบล็อกกล้อง\n" +
-          "ให้เปิดด้วย Safari/Chrome จริง แล้วใช้ลิงก์ที่เป็น script.googleusercontent.com",
-          "bad"
-        );
-        setScanState('ต้องเปิดด้วย Safari/Chrome จริง');
+      document.getElementById('reader').innerHTML = '';
+      setScanState('กำลังขอสิทธิ์กล้อง...');
+      setStatus('กำลังขอสิทธิ์กล้อง...', 'warn');
+
+      const ok = await preRequestCameraPermission();
+      if (!ok) {
+        setStatus('ยังไม่ได้รับสิทธิ์กล้อง (ไป Allow Camera ใน Browser/Settings)', 'bad');
+        setScanState('ไม่ได้รับสิทธิ์กล้อง');
         return;
       }
 
-      // เตือนถ้า URL ไม่ใช่ googleusercontent
-      if (!/script\.googleusercontent\.com/i.test(location.href)) {
-        setStatus(
-          "คำเตือน: ลิงก์นี้เป็น script.google.com\n" +
-          "ให้เปิดลิงก์แล้วคัดลอก URL หลัง redirect ที่เป็น script.googleusercontent.com มาใช้แทน\n\n" +
-          "URL ปัจจุบัน:\n" + location.href,
-          "warn"
-        );
-      }
-
-      document.getElementById('reader').innerHTML = '';
-      setScanState('กำลังเปิดกล้อง...');
-      setStatus('กำลังเปิดกล้อง...', 'warn');
-
       try{
         qr = new Html5Qrcode("reader");
+        const cameras = await Html5Qrcode.getCameras();
 
-        // ใช้ environment (กล้องหลัง) ก่อน ถ้าไม่ได้ค่อย fallback
+        let cam = cameras?.find(c => /back|rear|environment/i.test(c.label)) || cameras?.[0];
+        const camId = cam?.id;
+        if (!camId) {
+          setStatus('ไม่พบกล้องในอุปกรณ์นี้', 'bad');
+          setScanState('ไม่พบกล้อง');
+          return;
+        }
+
         scanning = true;
         await qr.start(
-          { facingMode: "environment" },
+          camId,
           { fps: 10, qrbox: { width: 250, height: 250 } },
           async (decodedText) => {
             const val = (decodedText || '').trim();
             document.getElementById('ticketId').value = val;
-            if (navigator.vibrate) navigator.vibrate(80);
+
+            if (navigator.vibrate) navigator.vibrate(60);
             setStatus('สแกนสำเร็จ: ' + val, 'ok');
             setScanState('สแกนสำเร็จ (หยุดอัตโนมัติ)');
             await stopScan();
@@ -190,14 +205,7 @@
         setScanState('กำลังสแกน...');
       } catch(err){
         scanning = false;
-        const info = buildHelpFromErr(err);
-        setStatus(
-          `เปิดกล้องไม่ได้\n` +
-          `Error: ${info.name}\n` +
-          `${info.msg}\n\n` +
-          `${info.hint}`,
-          'bad'
-        );
+        setStatus('เปิดกล้องไม่ได้\n' + String(err), 'bad');
         setScanState('เปิดกล้องไม่ได้');
       }
     }
@@ -208,7 +216,7 @@
           await qr.stop();
           await qr.clear();
         }
-      } catch(e) {}
+      } catch {}
       scanning = false;
       setScanState('หยุดแล้ว');
     }
@@ -218,29 +226,52 @@
       document.getElementById('result').style.display = 'none';
     }
 
-    function submitCheckin(){
+    async function submitCheckin(){
       const ticketId = document.getElementById('ticketId').value.trim();
-      const checker = document.getElementById('checker').value.trim();
+      const checkerName = document.getElementById('checker').value.trim();
 
       if (!ticketId) return setStatus('กรุณาสแกนหรือกรอกรหัสตั๋วก่อน', 'bad');
-      setStatus('กำลังเช็คอิน...', 'warn');
+      if (!API_URL || API_URL.includes('PUT_')) return setStatus('กรุณาตั้งค่า API_URL ให้ถูกต้องก่อน', 'bad');
 
-      google.script.run
-        .withSuccessHandler(res => {
-          if (!res?.ok) return setStatus(res?.message || 'ผิดพลาด', 'bad');
-          if (res.already) {
-            return setStatus(
-              `⚠️ ${res.message}\nชื่อ: ${res.name || '-'}\nเวลา: ${res.checkedInAt || '-'}\nโดย: ${res.checkedInBy || '-'}`,
-              'warn'
-            );
-          }
+      disableCheckin(true);
+      setStatus('กำลังเช็คอิน... (ถ้าช้าเกิน 12 วิให้ลองใหม่)', 'warn');
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12000);
+
+      try{
+        const r = await fetch(API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ticketId, checkerName }),
+          signal: controller.signal
+        });
+
+        const res = await r.json();
+
+        if (!res?.ok) {
+          setStatus(res?.message || 'ผิดพลาด', 'bad');
+          return;
+        }
+
+        if (res.already) {
           setStatus(
-            `✅ ${res.message}\nชื่อ: ${res.name || '-'}\nเวลา: ${res.checkedInAt || '-'}\nโดย: ${res.checkedInBy || '-'}`,
-            'ok'
+            `⚠️ ${res.message}\nชื่อ: ${res.name || '-'}\nเวลา: ${res.checkedInAt || '-'}\nโดย: ${res.checkedInBy || '-'}`,
+            'warn'
           );
-        })
-        .withFailureHandler(err => setStatus('ผิดพลาด: ' + String(err), 'bad'))
-        .checkInTicket(ticketId, checker);
+          return;
+        }
+
+        setStatus(
+          `✅ ${res.message}\nชื่อ: ${res.name || '-'}\nเวลา: ${res.checkedInAt || '-'}\nโดย: ${res.checkedInBy || '-'}`,
+          'ok'
+        );
+      } catch (e) {
+        setStatus('เช็คอินช้า/ไม่ตอบสนอง (ลองใหม่)\n' + String(e), 'bad');
+      } finally {
+        clearTimeout(timer);
+        disableCheckin(false);
+      }
     }
   </script>
 </body>
