@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>สแกน QR เช็คอิน</title>
+
   <style>
     :root{
       --bg:#0b1220; --card:#111b2e; --muted:#93a4c7; --text:#eaf0ff;
@@ -41,6 +42,7 @@
     .primary{ background:var(--btn); border-color: rgba(42,109,244,.4); }
     .danger{ background:#7d2c2c; border-color: rgba(125,44,44,.5); }
     .ghost{ background:transparent; }
+
     .status{
       margin-top:12px; padding:12px; border-radius:12px;
       display:none; white-space:pre-line; border:1px solid var(--border);
@@ -48,12 +50,122 @@
     .status.ok{ display:block; background:rgba(29,107,58,.25); }
     .status.bad{ display:block; background:rgba(122,29,29,.25); }
     .status.warn{ display:block; background:rgba(107,91,29,.25); }
+
     #reader{
-      margin-top:12px; overflow:hidden; border-radius:14px;
-      border:1px solid var(--border); background:#000;
+      margin-top:12px;
+      overflow:hidden;
+      border-radius:14px;
+      border:1px solid var(--border);
+      background:#000;
+      min-height: 320px;
     }
     .mini{ margin-top:10px; font-size:12px; color:rgba(234,240,255,.55); }
     .bar{ display:flex; gap:10px; margin-top:12px; }
+
+    /* ---------------------------
+       FULLSCREEN SCANNER MODE
+       --------------------------- */
+    .scannerOverlay{
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: #000;
+      display: none;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+    .scannerOverlay.active{ display: block; }
+
+    .scannerTopBar{
+      position: absolute;
+      left: 0; right: 0;
+      top: 0;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 10px;
+      padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
+      background: linear-gradient(to bottom, rgba(0,0,0,.75), rgba(0,0,0,0));
+      pointer-events: none; /* allow taps to go through except buttons */
+    }
+    .scannerTopBar .left,
+    .scannerTopBar .right{
+      display:flex; gap:10px; align-items:center;
+      pointer-events: auto;
+    }
+    .chip{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:10px 12px;
+      border-radius: 999px;
+      border:1px solid rgba(255,255,255,.18);
+      background: rgba(10,10,10,.55);
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 700;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
+    .chipBtn{
+      appearance: none;
+      border:1px solid rgba(255,255,255,.18);
+      background: rgba(10,10,10,.55);
+      color: var(--text);
+      font-weight: 800;
+      font-size: 14px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      white-space: nowrap;
+    }
+
+    .scannerReaderWrap{
+      position:absolute;
+      inset: 0;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    /* reader in fullscreen takes entire viewport */
+    #readerFull{
+      width: 100%;
+      height: 100%;
+      background:#000;
+    }
+
+    /* target box overlay */
+    .scanFrame{
+      position:absolute;
+      width: min(78vw, 360px);
+      height: min(78vw, 360px);
+      border-radius: 18px;
+      border: 2px solid rgba(234,240,255,.65);
+      box-shadow: 0 0 0 9999px rgba(0,0,0,.35);
+      pointer-events:none;
+    }
+    .scanHint{
+      position:absolute;
+      bottom: calc(18px + env(safe-area-inset-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(92vw, 520px);
+      text-align:center;
+      color: rgba(234,240,255,.9);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border:1px solid rgba(255,255,255,.18);
+      background: rgba(10,10,10,.45);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      pointer-events:none;
+    }
+
+    /* hide the normal reader while using fullscreen */
+    .hide{ display:none !important; }
   </style>
 </head>
 
@@ -69,7 +181,7 @@
       <input id="ticketId" placeholder="TICKET-XXXXXXXX" autocapitalize="characters" />
 
       <div class="row">
-        <button id="btnScan" class="primary" onclick="startScan()">📷 เริ่มสแกน</button>
+        <button id="btnScan" class="primary" onclick="startFullScanner()">📷 สแกนเต็มจอ</button>
         <button id="btnStop" onclick="stopScan()">⏹ หยุดสแกน</button>
       </div>
 
@@ -85,9 +197,30 @@
 
       <div id="result" class="status"></div>
 
+      <!-- Normal reader (keep for fallback / non-fullscreen if needed) -->
       <div id="reader"></div>
+
       <div class="mini" id="scanState">สถานะสแกน: ยังไม่เริ่ม</div>
       <div class="mini" id="apiState"></div>
+    </div>
+  </div>
+
+  <!-- Fullscreen scanner overlay -->
+  <div id="scannerOverlay" class="scannerOverlay" aria-hidden="true">
+    <div class="scannerTopBar">
+      <div class="left">
+        <button class="chipBtn" onclick="exitFullScanner()">✕ ออก</button>
+        <div class="chip" id="scannerModeChip">กำลังสแกน…</div>
+      </div>
+      <div class="right">
+        <button class="chipBtn" onclick="toggleTorch()" id="btnTorch">🔦 ไฟฉาย</button>
+      </div>
+    </div>
+
+    <div class="scannerReaderWrap">
+      <div id="readerFull"></div>
+      <div class="scanFrame"></div>
+      <div class="scanHint">วาง QR ให้อยู่ในกรอบ แล้วรอ 1–2 วินาที</div>
     </div>
   </div>
 
@@ -95,9 +228,12 @@
   <script>
     let qr = null;
     let scanning = false;
+    let usingFullScreen = false;
+    let lastDecodedAt = 0;
 
     const API_KEY = 'TICKET_CHECKIN_API_URL';
     function getApiUrl(){ return localStorage.getItem(API_KEY) || ''; }
+
     function setApiUrl(){
       const current = getApiUrl();
       const v = prompt('วาง Apps Script Web App URL (/exec):', current);
@@ -106,6 +242,7 @@
       renderApiState();
       setStatus('บันทึก API_URL แล้ว', 'ok');
     }
+
     function renderApiState(){
       const v = getApiUrl();
       document.getElementById('apiState').textContent = v ? ('API: ตั้งค่าแล้ว') : ('API: ยังไม่ตั้งค่า');
@@ -117,16 +254,25 @@
       el.style.display = 'block';
       el.textContent = msg;
     }
+    function hideStatus(){
+      const el = document.getElementById('result');
+      el.style.display = 'none';
+    }
+
     function setScanState(txt){
       document.getElementById('scanState').textContent = 'สถานะสแกน: ' + txt;
+      // Also show in fullscreen chip if active
+      const chip = document.getElementById('scannerModeChip');
+      if (chip) chip.textContent = txt;
     }
+
     function setBusy(b){
       document.getElementById('btnScan').disabled = b;
       document.getElementById('btnStop').disabled = b;
       document.getElementById('btnCheckin').disabled = b;
     }
 
-    // ✅ JSONP helper (แก้ CORS)
+    // JSONP helper (avoid CORS)
     function jsonp(url, timeoutMs = 12000){
       return new Promise((resolve, reject) => {
         const cb = 'cb_' + Math.random().toString(36).slice(2);
@@ -167,63 +313,129 @@
       });
     }
 
-    async function startScan(){
+    function buildApiUrl(params){
+      const api = getApiUrl();
+      if (!api) return '';
+      const u = new URL(api);
+      Object.entries(params).forEach(([k,v]) => u.searchParams.set(k, v));
+      return u.toString();
+    }
+
+    async function pickBackCameraId_(){
+      const cams = await Html5Qrcode.getCameras();
+      if (!cams || !cams.length) return null;
+      const back = cams.find(c => /back|rear|environment/i.test(c.label));
+      return (back || cams[cams.length - 1]).id; // fallback
+    }
+
+    function openOverlay_(){
+      const overlay = document.getElementById('scannerOverlay');
+      overlay.classList.add('active');
+      overlay.setAttribute('aria-hidden', 'false');
+
+      // Prevent background scroll
+      document.body.style.overflow = 'hidden';
+
+      // Blur any focused input to hide keyboard
+      try { document.activeElement && document.activeElement.blur(); } catch(e) {}
+
+      // Try request fullscreen (best effort)
+      try {
+        if (overlay.requestFullscreen) overlay.requestFullscreen();
+        else if (overlay.webkitRequestFullscreen) overlay.webkitRequestFullscreen();
+      } catch(e) {}
+    }
+
+    function closeOverlay_(){
+      const overlay = document.getElementById('scannerOverlay');
+      overlay.classList.remove('active');
+      overlay.setAttribute('aria-hidden', 'true');
+
+      document.body.style.overflow = '';
+
+      // Exit fullscreen (best effort)
+      try {
+        if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
+        else if (document.webkitFullscreenElement && document.webkitExitFullscreen) document.webkitExitFullscreen();
+      } catch(e) {}
+    }
+
+    async function startFullScanner(){
       if (scanning) return;
 
-      document.getElementById('reader').innerHTML = '';
+      usingFullScreen = true;
+      openOverlay_();
+
+      // Hide normal reader area (optional)
+      document.getElementById('reader').classList.add('hide');
+      hideStatus();
+
+      // Prepare fullscreen reader container
+      document.getElementById('readerFull').innerHTML = '';
+
       setScanState('กำลังเปิดกล้อง...');
-      setStatus('กำลังเปิดกล้อง...', 'warn');
+      setStatus('กำลังเปิดกล้อง...', 'warn'); // shown in normal page (hidden) but ok
 
       try{
-        qr = new Html5Qrcode("reader");
+        qr = new Html5Qrcode("readerFull");
         scanning = true;
 
-        // ✅ พยายามบังคับกล้องหลัง
-        const cameraConfig = { facingMode: { exact: "environment" } };
+        const camId = await pickBackCameraId_();
+
+        const config = {
+          fps: 20,
+          qrbox: { width: 260, height: 260 },
+          disableFlip: true,
+          experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+        };
+
+        const videoConstraints = {
+          facingMode: "environment",
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        };
 
         await qr.start(
-          cameraConfig,
-          { fps: 10, qrbox: { width: 250, height: 250 } },
+          camId ? { deviceId: { exact: camId } } : videoConstraints,
+          { ...config, videoConstraints },
           async (decodedText) => {
+            // debounce duplicates
+            const now = Date.now();
+            if (now - lastDecodedAt < 800) return;
+            lastDecodedAt = now;
+
             const val = (decodedText || '').trim();
+            if (!val) return;
+
             document.getElementById('ticketId').value = val;
             if (navigator.vibrate) navigator.vibrate(60);
-            setStatus('สแกนสำเร็จ: ' + val, 'ok');
-            setScanState('สแกนสำเร็จ (หยุดอัตโนมัติ)');
-            await stopScan();
+
+            setScanState('สแกนสำเร็จ');
+            // Stop quickly (no await to feel instant)
+            stopScan();
+
+            // Auto check-in immediately (optional)
+            // If you want manual check-in, comment next line.
+            submitCheckin();
           }
         );
 
-        setStatus('เปิดกล้องแล้ว กำลังสแกน...', 'ok');
         setScanState('กำลังสแกน...');
-
-      } catch(err1){
-        // fallback
-        try{
-          if (qr) { try { await qr.stop(); } catch(e){} try{ await qr.clear(); }catch(e){} }
-          qr = new Html5Qrcode("reader");
-
-          await qr.start(
-            { facingMode: "environment" },
-            { fps: 10, qrbox: { width: 250, height: 250 } },
-            async (decodedText) => {
-              const val = (decodedText || '').trim();
-              document.getElementById('ticketId').value = val;
-              if (navigator.vibrate) navigator.vibrate(60);
-              setStatus('สแกนสำเร็จ: ' + val, 'ok');
-              setScanState('สแกนสำเร็จ (หยุดอัตโนมัติ)');
-              await stopScan();
-            }
-          );
-
-          setStatus('เปิดกล้องแล้ว กำลังสแกน...', 'ok');
-          setScanState('กำลังสแกน...');
-        } catch(err2){
-          scanning = false;
-          setStatus('เปิดกล้องไม่ได้\n' + String(err2 || err1), 'bad');
-          setScanState('เปิดกล้องไม่ได้');
-        }
+      } catch(err){
+        scanning = false;
+        setScanState('เปิดกล้องไม่ได้');
+        closeOverlay_();
+        document.getElementById('reader').classList.remove('hide');
+        setStatus('เปิดกล้องไม่ได้\n' + String(err), 'bad');
       }
+    }
+
+    async function exitFullScanner(){
+      usingFullScreen = false;
+      await stopScan();
+      closeOverlay_();
+      document.getElementById('reader').classList.remove('hide');
+      setScanState('หยุดแล้ว');
     }
 
     async function stopScan(){
@@ -234,20 +446,17 @@
         }
       } catch(e) {}
       scanning = false;
-      setScanState('หยุดแล้ว');
+
+      // If stopping while in fullscreen, close overlay
+      if (usingFullScreen) {
+        closeOverlay_();
+        usingFullScreen = false;
+      }
     }
 
     function clearAll(){
       document.getElementById('ticketId').value = '';
-      document.getElementById('result').style.display = 'none';
-    }
-
-    function buildApiUrl(params){
-      const api = getApiUrl();
-      if (!api) return '';
-      const u = new URL(api);
-      Object.entries(params).forEach(([k,v]) => u.searchParams.set(k, v));
-      return u.toString();
+      hideStatus();
     }
 
     async function testApi(){
@@ -277,29 +486,85 @@
       if (!url) return setStatus('ยังไม่ได้ตั้งค่า API_URL', 'bad');
 
       setBusy(true);
+      setScanState('กำลังเช็คอิน...');
       setStatus('กำลังเช็คอิน...', 'warn');
 
       try{
         const data = await jsonp(url, 12000);
-        if (!data?.ok) return setStatus(data?.message || 'เช็คอินไม่สำเร็จ', 'bad');
+        if (!data?.ok) {
+          setScanState('เช็คอินไม่สำเร็จ');
+          return setStatus(data?.message || 'เช็คอินไม่สำเร็จ', 'bad');
+        }
 
         if (data.already) {
+          setScanState('ตั๋วนี้เช็คอินแล้ว');
           return setStatus(
             `⚠️ ${data.message}\nชื่อ: ${data.name || '-'}\nเวลา: ${data.checkedInAt || '-'}\nโดย: ${data.checkedInBy || '-'}`,
             'warn'
           );
         }
 
+        setScanState('เช็คอินสำเร็จ');
         setStatus(
           `✅ ${data.message}\nชื่อ: ${data.name || '-'}\nเวลา: ${data.checkedInAt || '-'}\nโดย: ${data.checkedInBy || '-'}`,
           'ok'
         );
+
       } catch(e){
+        setScanState('เช็คอินผิดพลาด');
         setStatus('เช็คอินผิดพลาด: ' + String(e), 'bad');
       } finally {
         setBusy(false);
       }
     }
+
+    // Torch (flashlight) best-effort
+    async function toggleTorch(){
+      try{
+        if (!qr || !scanning) return;
+        // html5-qrcode provides applyVideoConstraints on newer versions
+        // We'll try constraints with torch if supported by the browser.
+        const track = await getVideoTrack_();
+        if (!track) return;
+
+        const cap = track.getCapabilities ? track.getCapabilities() : {};
+        if (!cap.torch) {
+          setStatus('อุปกรณ์นี้ไม่รองรับไฟฉาย', 'warn');
+          return;
+        }
+
+        const settings = track.getSettings ? track.getSettings() : {};
+        const torchOn = !!settings.torch;
+
+        await track.applyConstraints({ advanced: [{ torch: !torchOn }] });
+        document.getElementById('btnTorch').textContent = !torchOn ? '🔦 ปิดไฟฉาย' : '🔦 ไฟฉาย';
+      } catch(e){
+        setStatus('เปิด/ปิดไฟฉายไม่ได้: ' + String(e), 'warn');
+      }
+    }
+
+    async function getVideoTrack_(){
+      try{
+        // html5-qrcode internal access isn't public; we try to find active video element in overlay
+        const videos = document.querySelectorAll('#scannerOverlay video');
+        const v = videos && videos[0];
+        if (!v || !v.srcObject) return null;
+        const tracks = v.srcObject.getVideoTracks();
+        return tracks && tracks[0] ? tracks[0] : null;
+      } catch(e){
+        return null;
+      }
+    }
+
+    // Close overlay if user presses ESC / back or changes fullscreen
+    document.addEventListener('fullscreenchange', () => {
+      const overlay = document.getElementById('scannerOverlay');
+      const active = overlay.classList.contains('active');
+      if (active && !document.fullscreenElement) {
+        // user exited fullscreen manually
+        // keep overlay UI but allow it; optional: close
+      }
+    });
 
     renderApiState();
   </script>
